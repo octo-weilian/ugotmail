@@ -6,15 +6,19 @@ import email
 import random
 import string
 
+#instantiate custom logger
 LOGGER = logging.init_logger()
 
 class Mail:
+
+    #input parameters
     def __init__(self,server,port,user,secret):
         self.server = server
         self.port = port
         self.user = user
         self.secret = secret
-        
+    
+    #connection handler
     @contextmanager
     def connection(self):
         try:
@@ -31,6 +35,7 @@ class Mail:
             LOGGER.info('Disconnected')
             self.client.logout()
 
+    #idle mode method
     def run_idle(self,task_queue=None,idle_timeout=30,idle_refresh=780):
         with self.connection() as conn:
             inbox = conn.select_folder("INBOX",readonly=True)
@@ -57,6 +62,7 @@ class Mail:
                         start_time = run_time+idle_refresh
                         LOGGER.info("IDLE refreshed!")
 
+    #method to parse mail
     def parse_mail(self,mail_index):
         with self.connection() as conn:
             try:
@@ -65,10 +71,11 @@ class Mail:
                 for uid, message_data in conn.fetch(message, "RFC822").items():
                     email_message = email.message_from_bytes(message_data[b"RFC822"])
                     email_subject = email_message.get("Subject")
-                    LOGGER.info(email_subject)
+                    LOGGER.info(f"Mail nr. {mail_index} with subject: {email_subject}")
             except Exception as e:
                 LOGGER.error(f"Failed to parse mail with index {mail_index}: {e}")
-      
+    
+    #handle any task in queue
     def handle_tasks(self,task_queue):
         while True:
             self.parse_mail(task_queue.get())

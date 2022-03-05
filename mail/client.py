@@ -1,10 +1,9 @@
 from . import logging
 from contextlib import contextmanager
 from imapclient import IMAPClient
+from queue import Queue
 import time
 import email
-import random
-import string
 
 #instantiate custom logger
 LOGGER = logging.init_logger()
@@ -12,36 +11,34 @@ LOGGER = logging.init_logger()
 class Mail:
 
     #input parameters
-    def __init__(self,server,port,user,secret):
+    def __init__(self,server:str,port:int,user:str,secret:str)->None:
         self.server = server
         self.port = port
         self.user = user
         self.secret = secret
+        self.alias =  '*'*len(self.user.split('@')[0]) +'@'+ self.user.split('@')[-1]
     
     #connection handler
     @contextmanager
-    def connection(self):
+    def connection(self)->IMAPClient:
         try:
             self.client = IMAPClient(self.server,self.port)
             login = self.client.login(self.user,self.secret)
             if login:
-                alias =  '*'*len(self.user.split('@')[0]) +'@'+ self.user.split('@')[-1]
-                LOGGER.info(f"Connected to {self.server} with {alias}.")
                 yield self.client
         except Exception as e:
-            LOGGER.error(f"Disconnected with error: {e}")
+            LOGGER.error(f"Unable to connect to {self.server}. Exited with error: {e}")
             self.client.logout()
         finally:
-            LOGGER.info('Disconnected')
             self.client.logout()
 
     #idle mode method
-    def run_idle(self,task_queue=None,idle_timeout=30,idle_refresh=780):
+    def run_idle(self,task_queue:Queue=None,idle_timeout:int=10,idle_refresh:int=900)->None:
         with self.connection() as conn:
+            LOGGER.info(f"Connected to {self.server} with {self.alias}")
             inbox = conn.select_folder("INBOX",readonly=True)
             conn.idle()
             start_time = int(time.monotonic())+idle_refresh
-            LOGGER.info('Entered IDLE mode')
             while True:
                 try:
                     idle_response = conn.idle_check(timeout=idle_timeout)
@@ -51,7 +48,7 @@ class Mail:
                         if task_queue:
                             task_queue.put(total_mails[0])
                 except Exception as e:
-                    LOGGER.error("Exited IDLE mode with error: {e}")
+                    LOGGER.error(f"Disconnected with error: {e}")
                     conn.idle_done()
                     break
                 finally:
@@ -63,7 +60,7 @@ class Mail:
                         LOGGER.info("IDLE refreshed!")
 
     #method to parse mail
-    def parse_mail(self,mail_index):
+    def parse_mail(self,mail_index:int)->None:
         with self.connection() as conn:
             try:
                 inbox = conn.select_folder("INBOX", readonly = True)
@@ -76,7 +73,7 @@ class Mail:
                 LOGGER.error(f"Failed to parse mail with index {mail_index}: {e}")
     
     #handle any task in queue
-    def handle_tasks(self,task_queue):
+    def handle_tasks(self,task_queue:Queue)->None:
         while True:
             self.parse_mail(task_queue.get())
             task_queue.task_done()

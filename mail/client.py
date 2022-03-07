@@ -16,8 +16,7 @@ class Mail:
         self.port = port
         self.user = user
         self.secret = secret
-        self.alias =  '*'*len(self.user.split('@')[0]) +'@'+ self.user.split('@')[-1]
-    
+
     #connection handler
     @contextmanager
     def connection(self)->IMAPClient:
@@ -35,7 +34,7 @@ class Mail:
     #idle mode method
     def run_idle(self,task_queue:Queue=None,idle_timeout:int=10,idle_refresh:int=900)->None:
         with self.connection() as conn:
-            LOGGER.info(f"Connected to {self.server} with {self.alias}")
+            LOGGER.info(f"Listening to {self.server}...")
             inbox = conn.select_folder("INBOX",readonly=True)
             conn.idle()
             start_time = int(time.monotonic())+idle_refresh
@@ -43,7 +42,6 @@ class Mail:
                 try:
                     idle_response = conn.idle_check(timeout=idle_timeout)
                     if len(idle_response)>0 and idle_response[0][1].decode()=="RECENT":
-                        LOGGER.info(f"You got mail! IMAP response: {idle_response}")
                         recent_mails,total_mails = idle_response
                         if task_queue:
                             task_queue.put(total_mails[0])
@@ -65,10 +63,10 @@ class Mail:
             try:
                 inbox = conn.select_folder("INBOX", readonly = True)
                 message = conn.search(str(mail_index))
-                for uid, message_data in conn.fetch(message, "RFC822").items():
-                    email_message = email.message_from_bytes(message_data[b"RFC822"])
-                    email_subject = email_message.get("Subject")
-                    LOGGER.info(f"Mail nr. {mail_index} with subject: {email_subject}")
+                uid, message_data = next(iter(conn.fetch(message, "RFC822").items()))
+                email_message = email.message_from_bytes(message_data[b"RFC822"])
+                email_subject = email_message.get("Subject")
+                LOGGER.info(f"Mail nr. {mail_index} with subject: {email_subject}")
             except Exception as e:
                 LOGGER.error(f"Failed to parse mail with index {mail_index}: {e}")
     

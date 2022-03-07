@@ -3,6 +3,8 @@ from threading import Thread
 from queue import Queue
 import keyring
 
+import asyncio
+
 def main():
 
     #instantiate a FIFO queue with maxsize=10 (will block if queue.Full)
@@ -24,6 +26,5 @@ def main():
     #spawning a consumer that processes any new task in queue
     Thread(target=consumer_client.handle_tasks,args=(SHARED_QUEUE,)).start()
     
-
 if __name__ == '__main__':
     main()

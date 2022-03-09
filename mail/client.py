@@ -10,7 +10,7 @@ LOGGER = logging.init_logger()
 
 class Mail:
 
-    #input parameters
+    #input IMAP and authentication parameters
     def __init__(self,server:str,port:int,user:str,secret:str)->None:
         self.server = server
         self.port = port
@@ -21,7 +21,7 @@ class Mail:
     @contextmanager
     def connection(self)->IMAPClient:
         try:
-            self.client = IMAPClient(self.server,self.port)
+            self.client = IMAPClient(self.server,self.port,use_uid=True)
             login = self.client.login(self.user,self.secret)
             if login:
                 yield self.client
@@ -31,7 +31,7 @@ class Mail:
         finally:
             self.client.logout()
 
-    #idle mode method
+    #method to enter idle mode
     def run_idle(self,task_queue:Queue=None,idle_timeout:int=10,idle_refresh:int=900)->None:
         with self.connection() as conn:
             LOGGER.info(f"Listening to {self.server}...")
@@ -45,6 +45,7 @@ class Mail:
                         recent_mails,total_mails = idle_response
                         if task_queue:
                             task_queue.put(total_mails[0])
+                            LOGGER.info(f'SEQ :{total_mails[0]}')
                 except Exception as e:
                     LOGGER.error(f"Disconnected with error: {e}")
                     conn.idle_done()
@@ -56,24 +57,35 @@ class Mail:
                         conn.idle()
                         start_time = run_time+idle_refresh
                         LOGGER.info("IDLE refreshed!")
-
+    
     #method to parse mail
-    def parse_mail(self,mail_index:int)->None:
+    def parse_mail(self,mail_uid:int)->None:
         with self.connection() as conn:
             try:
                 inbox = conn.select_folder("INBOX", readonly = True)
-                message = conn.search(str(mail_index))
-                uid, message_data = next(iter(conn.fetch(message, "RFC822").items()))
+                message = conn.search(["UID",str(mail_uid)])
+                print(len(message))
+                _, message_data = next(iter(conn.fetch(message, "RFC822").items()))
                 email_message = email.message_from_bytes(message_data[b"RFC822"])
                 email_subject = email_message.get("Subject")
-                LOGGER.info(f"Mail nr. {mail_index} with subject: {email_subject}")
+                LOGGER.info(f"UID: {mail_uid} Subject: {email_subject}")
             except Exception as e:
-                LOGGER.error(f"Failed to parse mail with index {mail_index}: {e}")
+                LOGGER.error(f"Failed to parse mail with UID {mail_uid}: {e}")
     
-    #handle any task in queue
+
+    def get_uid(self,mail_index:int)->None:
+        with self.connection() as conn:
+            try:
+                inbox = conn.select_folder("INBOX",readonly=True)
+                uid,_ =  next(iter(conn.fetch(conn.search([str(mail_index)]), "ENVELOPE").items()))
+                return uid
+            except Exception as e:
+                        LOGGER.error(f"Failed to get message UID  with sequence nr. {mail_index}: {e}")
+
+    #method to handle running tasks
     def handle_tasks(self,task_queue:Queue)->None:
         while True:
-            self.parse_mail(task_queue.get())
+            self.parse_mail(self.get_uid(task_queue.get()))
             task_queue.task_done()
 
         

@@ -3,12 +3,10 @@ from threading import Thread
 from queue import Queue
 import keyring
 
-import asyncio
-
 def main():
 
     #instantiate a FIFO queue with maxsize=10 (will block if queue.Full)
-    SHARED_QUEUE = Queue(maxsize=10)
+    SHARED_QUEUE = Queue(maxsize=20)
     
     #instantiate two client sessions
     producer_client = Mail("outlook.office365.com",993,
@@ -20,10 +18,10 @@ def main():
                             keyring.get_credential("HOTMAIL",None).password
                             )
 
-    #spawning a background task which monitors new mail and put it into queue as task
+    #spawn a background task which monitors new messages and put into the queue as task
     Thread(target=producer_client.run_idle,args=(SHARED_QUEUE,),daemon=True).start()
     
-    #spawning a consumer that processes any new task in queue
+    #spawn a consumer that fetch and processes any new task from the queue
     Thread(target=consumer_client.handle_tasks,args=(SHARED_QUEUE,)).start()
     
 if __name__ == '__main__':

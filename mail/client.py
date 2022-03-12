@@ -45,7 +45,6 @@ class Mail:
                         recent_mails,total_mails = idle_response
                         if task_queue:
                             task_queue.put(total_mails[0])
-                            LOGGER.info(f'SEQ :{total_mails[0]}')
                 except Exception as e:
                     LOGGER.error(f"Disconnected with error: {e}")
                     conn.idle_done()
@@ -61,26 +60,29 @@ class Mail:
     #method to parse mail
     def parse_mail(self,mail_uid:int)->None:
         with self.connection() as conn:
+            inbox = conn.select_folder("INBOX", readonly = True)
             try:
-                inbox = conn.select_folder("INBOX", readonly = True)
                 message = conn.search(["UID",str(mail_uid)])
-                print(len(message))
                 _, message_data = next(iter(conn.fetch(message, "RFC822").items()))
-                email_message = email.message_from_bytes(message_data[b"RFC822"])
+                email_message = email.message_from_bytes(message_data[b"RFC822"],_class=email.message.EmailMessage)
                 email_subject = email_message.get("Subject")
-                LOGGER.info(f"UID: {mail_uid} Subject: {email_subject}")
+                email_attachment = self.get_attachment(email_message)
+                LOGGER.info(f"UID: {mail_uid} Subject: {email_subject} Attachments: {email_attachment}")
             except Exception as e:
                 LOGGER.error(f"Failed to parse mail with UID {mail_uid}: {e}")
     
-
+    def get_attachment(self,msg):
+        return [part.get_filename() for part in msg.iter_attachments()]
+        
     def get_uid(self,mail_index:int)->None:
         with self.connection() as conn:
             try:
                 inbox = conn.select_folder("INBOX",readonly=True)
-                uid,_ =  next(iter(conn.fetch(conn.search([str(mail_index)]), "ENVELOPE").items()))
+                message = conn.search([str(mail_index)])
+                uid, _ =  next(iter(conn.fetch(message, "ENVELOPE").items()))
                 return uid
             except Exception as e:
-                        LOGGER.error(f"Failed to get message UID  with sequence nr. {mail_index}: {e}")
+                LOGGER.error(f"Failed to get message UID  with sequence nr. {mail_index}: {e}")
 
     #method to handle running tasks
     def handle_tasks(self,task_queue:Queue)->None:

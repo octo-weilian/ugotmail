@@ -1,13 +1,15 @@
-from . import logging
 from contextlib import contextmanager
+from threading import Thread
 from imapclient import IMAPClient
 from queue import Queue
 import time
 import email
+from . import logginghandler
 
 #instantiate custom logger
-LOGGER = logging.init_logger()
+LOGGER = logginghandler.init_logger()
 
+#mail client
 class Mail:
 
     #input IMAP and authentication parameters
@@ -22,8 +24,7 @@ class Mail:
     def connection(self)->IMAPClient:
         try:
             self.client = IMAPClient(self.server,self.port,use_uid=True)
-            login = self.client.login(self.user,self.secret)
-            if login:
+            if (login:=self.client.login(self.user,self.secret)):
                 yield self.client
         except Exception as e:
             LOGGER.error(f"Unable to connect to {self.server}. Exited with error: {e}")
@@ -41,10 +42,10 @@ class Mail:
             while True:
                 try:
                     idle_response = conn.idle_check(timeout=idle_timeout)
-                    if len(idle_response)>0 and idle_response[0][1].decode()=="RECENT":
-                        recent_mails,total_mails = idle_response
-                        if task_queue:
-                            task_queue.put(total_mails[0])
+                    idle_condition = len(idle_response)>0 and idle_response[0][1].decode()=="RECENT"
+                    if idle_condition and task_queue:
+                        msg_seq = idle_response[-1][0]
+                        task_queue.put(msg_seq)
                 except Exception as e:
                     LOGGER.error(f"Disconnected with error: {e}")
                     conn.idle_done()
@@ -58,42 +59,47 @@ class Mail:
                         LOGGER.info("IDLE refreshed!")
     
     #method to parse mail
-    def parse_mail(self,mail_uid:int)->None:
+    def parse_msg(self,msg_uid:int)->None:
         with self.connection() as conn:
             inbox = conn.select_folder("INBOX", readonly = True)
             try:
-                message = conn.search(["UID",str(mail_uid)])
-                _, message_data = next(iter(conn.fetch(message, "RFC822").items()))
-                email_message = email.message_from_bytes(message_data[b"RFC822"],_class=email.message.EmailMessage)
-                email_subject = email_message.get("Subject")
-                email_attachment = self.get_attachment(email_message)
-                LOGGER.info(f"UID: {mail_uid} Subject: {email_subject} Attachments: {email_attachment}")
+                data = next(iter(conn.fetch(msg_uid, "RFC822").items()))[-1]
+                email_msg = email.message_from_bytes(data[b"RFC822"],_class=email.message.EmailMessage)
+                email_subject = email_msg.get("Subject")
+                email_attachments = self.get_attachments(email_msg)
+                LOGGER.info(f"UID: {msg_uid} Subject: {email_subject} Attachments: {email_attachments}")
             except Exception as e:
-                LOGGER.error(f"Failed to parse mail with UID {mail_uid}: {e}")
+                LOGGER.error(f"Failed to parse mail with UID {msg_uid}: {e}")
     
-    def get_attachment(self,msg):
-        return [part.get_filename() for part in msg.iter_attachments()]
+    def get_attachments(self,email_msg):
+        return [part.get_filename() for part in email_msg.iter_attachments()]
         
-    def get_uid(self,mail_index:int)->None:
+    #method to get uid from message sequence
+    def get_uid(self,msg_seq:int)->None:
         with self.connection() as conn:
-            try:
-                inbox = conn.select_folder("INBOX",readonly=True)
-                message = conn.search([str(mail_index)])
-                uid, _ =  next(iter(conn.fetch(message, "ENVELOPE").items()))
-                return uid
-            except Exception as e:
-                LOGGER.error(f"Failed to get message UID  with sequence nr. {mail_index}: {e}")
-
+            inbox = conn.select_folder("INBOX",readonly=True)
+            return conn.search(str(msg_seq))
+            
     #method to handle running tasks
     def handle_tasks(self,task_queue:Queue)->None:
         while True:
-            self.parse_mail(self.get_uid(task_queue.get()))
+            self.parse_msg(self.get_uid(task_queue.get()))
             task_queue.task_done()
 
+#monitoring
+class Watchdog():
+    def __init__(self,server,port,user,secret,queue_size=10):
+        self.producer = Mail(server,port,user,secret)
+        self.consumer = Mail(server,port,user,secret)
+        self.shared_queue = Queue(maxsize=queue_size)
+    
+    def monitor(self):
+        #spawn a background task which monitors new messages and put into the queue as task
+        Thread(target=self.producer.run_idle,args=(self.shared_queue,),daemon=True).start()
         
+        #spawn a consumer that fetch and processes any new task from the queue
+        Thread(target=self.consumer.handle_tasks,args=(self.shared_queue,)).start()
 
-
-
-
+        
 
 

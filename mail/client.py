@@ -1,7 +1,7 @@
 from contextlib import contextmanager
 from threading import Thread
 from imapclient import IMAPClient
-from queue import Queue
+import queue
 import time
 import email
 from . import logginghandler
@@ -33,7 +33,7 @@ class Mail:
             self.client.logout()
 
     #method to enter idle mode
-    def run_idle(self,task_queue:Queue=None,idle_timeout:int=10,idle_refresh:int=900)->None:
+    def run_idle(self,task_queue:queue.Queue=None,idle_timeout:int=10,idle_refresh:int=900)->None:
         with self.connection() as conn:
             LOGGER.info(f"Listening to {self.server}...")
             inbox = conn.select_folder("INBOX",readonly=True)
@@ -51,12 +51,12 @@ class Mail:
                     conn.idle_done()
                     break
                 finally:
+                    #refresh IDLE every --> idle_refresh
                     run_time = int(time.monotonic())
                     if start_time-run_time<=0:
                         conn.idle_done()
                         conn.idle()
                         start_time = run_time+idle_refresh
-                        LOGGER.info("IDLE refreshed!")
     
     #method to parse mail
     def parse_msg(self,msg_uid:int)->None:
@@ -81,24 +81,26 @@ class Mail:
             return conn.search(str(msg_seq))
             
     #method to handle running tasks
-    def handle_tasks(self,task_queue:Queue)->None:
+    def handle_tasks(self,seq_queue:queue.Queue,uid_queue:queue.Queue)->None:
         while True:
-            self.parse_msg(self.get_uid(task_queue.get()))
-            task_queue.task_done()
+            msg_uid = self.get_uid(seq_queue.get(False))
+            uid_queue.put(msg_uid)
+            seq_queue.task_done()
 
 #monitoring
 class Watchdog():
     def __init__(self,server,port,user,secret,queue_size=10):
         self.producer = Mail(server,port,user,secret)
         self.consumer = Mail(server,port,user,secret)
-        self.shared_queue = Queue(maxsize=queue_size)
-    
+        self.seq_queue = queue.Queue(maxsize=queue_size)
+        self.uid_queue = queue.Queue(maxsize=queue_size)
+        
     def monitor(self):
         #spawn a background task which monitors new messages and put into the queue as task
-        Thread(target=self.producer.run_idle,args=(self.shared_queue,),daemon=True).start()
+        Thread(target=self.producer.run_idle,args=(self.seq_queue,),daemon=True).start()
         
         #spawn a consumer that fetch and processes any new task from the queue
-        Thread(target=self.consumer.handle_tasks,args=(self.shared_queue,)).start()
+        Thread(target=self.consumer.handle_tasks,args=(self.seq_queue,self.uid_queue)).start()
 
         
 

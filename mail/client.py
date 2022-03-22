@@ -5,6 +5,7 @@ import queue
 import time
 import email
 from . import logginghandler
+import schedule
 
 #instantiate custom logger
 LOGGER = logginghandler.init_logger()
@@ -80,18 +81,30 @@ class Mail:
             inbox = conn.select_folder("INBOX",readonly=True)
             return conn.search(str(msg_seq))
             
-    #method to handle running tasks
-    def handle_tasks(self,seq_queue:queue.Queue,uid_queue:queue.Queue)->None:
+    #method to handle incoming MSN (message sequence number)
+    def handle_seq(self,seq_queue:queue.Queue,uid_queue:queue.Queue)->None:
         while True:
-            msg_uid = self.get_uid(seq_queue.get(False))
-            uid_queue.put(msg_uid)
+            uid_queue.put(self.get_uid(seq_queue.get()))
             seq_queue.task_done()
+
+    def handle_uid(self,uid_queue:queue.Queue):
+        #run this every 30 minutes
+        cached_uids = []
+        while True:
+            try:
+                cached_uids.append(uid_queue.get(False))
+            except queue.Empty:
+                print(f'Decomposing {len(cached_uids)} msgs..')
+                break
+            else:
+                uid_queue.task_done()
 
 #monitoring
 class Watchdog():
     def __init__(self,server,port,user,secret,queue_size=10):
         self.producer = Mail(server,port,user,secret)
         self.consumer = Mail(server,port,user,secret)
+        self.decomposer = Mail(server,port,user,secret)
         self.seq_queue = queue.Queue(maxsize=queue_size)
         self.uid_queue = queue.Queue(maxsize=queue_size)
         
@@ -100,8 +113,11 @@ class Watchdog():
         Thread(target=self.producer.run_idle,args=(self.seq_queue,),daemon=True).start()
         
         #spawn a consumer that fetch and processes any new task from the queue
-        Thread(target=self.consumer.handle_tasks,args=(self.seq_queue,self.uid_queue)).start()
+        Thread(target=self.consumer.handle_seq,args=(self.seq_queue,self.uid_queue)).start()
 
-        
-
+        #decompose/ parse message uids on schedule
+        schedule.every(30).minutes.do(self.decomposer.handle_uid,self.uid_queue)
+        while True:
+            schedule.run_pending()
+            
 

@@ -6,6 +6,7 @@ import time
 import email
 from . import logginghandler
 import schedule
+from datetime import datetime
 
 #instantiate custom logger
 LOGGER = logginghandler.init_logger()
@@ -43,10 +44,10 @@ class Mail:
             while True:
                 try:
                     idle_response = conn.idle_check(timeout=idle_timeout)
-                    idle_condition = len(idle_response)>0 and idle_response[0][1].decode()=="RECENT"
-                    if idle_condition and task_queue:
-                        msg_seq = idle_response[-1][0]
-                        task_queue.put(msg_seq)
+                    if idle_response and task_queue:
+                        if  idle_response[-1][-1] == b'EXISTS':
+                            msg_seq = idle_response[-1][0]
+                            task_queue.put(msg_seq)
                 except Exception as e:
                     LOGGER.error(f"Disconnected with error: {e}")
                     conn.idle_done()
@@ -79,34 +80,39 @@ class Mail:
     def get_uid(self,msg_seq:int)->None:
         with self.connection() as conn:
             inbox = conn.select_folder("INBOX",readonly=True)
-            return conn.search(str(msg_seq))
-            
-    #method to handle incoming MSN (message sequence number)
-    def handle_seq(self,seq_queue:queue.Queue,uid_queue:queue.Queue)->None:
-        while True:
-            uid_queue.put(self.get_uid(seq_queue.get()))
-            seq_queue.task_done()
+            return conn.search(str(msg_seq))[0]
 
-    def handle_uid(self,uid_queue:queue.Queue):
+    def decompose_uid(self,uid_queue:queue.Queue):
         #run this every 30 minutes
         cached_uids = []
         while True:
             try:
                 cached_uids.append(uid_queue.get(False))
             except queue.Empty:
-                print(f'Decomposing {len(cached_uids)} msgs..')
+                print(f'Decomposing msg uids: {cached_uids}')
                 break
             else:
                 uid_queue.task_done()
 
+    #method to handle incoming MSN (message sequence number)
+    def handle_seq(self,seq_queue:queue.Queue,uid_queue:queue.Queue)->None:
+        while True:
+            uid_queue.put(self.get_uid(seq_queue.get()))
+            seq_queue.task_done()
+
+    def handle_uid(self,uid_queue:queue.Queue,name):
+        print(f'{datetime.now().strftime("%X")} - Running thread {name}')
+        Thread(target=self.decompose_uid,args=(uid_queue,)).start()
+
 #monitoring
 class Watchdog():
-    def __init__(self,server,port,user,secret,queue_size=10):
+    def __init__(self,server,port,user,secret,queue_size=10,name=None):
         self.producer = Mail(server,port,user,secret)
         self.consumer = Mail(server,port,user,secret)
         self.decomposer = Mail(server,port,user,secret)
         self.seq_queue = queue.Queue(maxsize=queue_size)
         self.uid_queue = queue.Queue(maxsize=queue_size)
+        self.name = name
         
     def monitor(self):
         #spawn a background task which monitors new messages and put into the queue as task
@@ -116,8 +122,11 @@ class Watchdog():
         Thread(target=self.consumer.handle_seq,args=(self.seq_queue,self.uid_queue)).start()
 
         #decompose/ parse message uids on schedule
-        schedule.every(30).minutes.do(self.decomposer.handle_uid,self.uid_queue)
+        # schedule.every(30).minutes.do(self.decomposer.handle_uid,self.uid_queue)
+        
+        schedule.every(10).seconds.do(self.decomposer.handle_uid,self.uid_queue,self.name)
         while True:
             schedule.run_pending()
+            time.sleep(1)
             
 

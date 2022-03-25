@@ -4,13 +4,18 @@ from mail.client import Mail
 import keyring
 import email
 
-test_client = Mail("outlook.office365.com",993,
+outlook_client = Mail("outlook.office365.com",993,
                             keyring.get_credential("HOTMAIL",None).username,
                             keyring.get_credential("HOTMAIL",None).password)
 
-with test_client.connection() as conn:
-    inbox = conn.select_folder("INBOX",readonly=True)
-    print(conn.search('4300'))
+icloud_client = Mail("imap.mail.me.com",993,
+                    keyring.get_credential("APPLE",None).username,
+                    keyring.get_credential("APPLE",None).password)
+
+with outlook_client.connection() as conn:
+    # inbox = conn.select_folder("INBOX",readonly=True)
+    
+    print(conn.noop())
     
 
 

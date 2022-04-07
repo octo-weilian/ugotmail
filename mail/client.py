@@ -77,6 +77,7 @@ class Mail:
                     msg_uid = conn.search(str(msg_seq))[0]
                     uid_queue.put(msg_uid)
                     seq_queue.task_done()
+                    time.sleep(1)
                 except Exception as e:
                     LOGGER.error(f"Disconnected with error: {e}")
                     break
@@ -86,7 +87,7 @@ class Mail:
                     if start_time-run_time<=0:
                         conn.noop()
                         start_time = run_time+snooze
-
+    
     #method to parse message (executed on scheduled call)
     def handle_uid(self,uid_queue:queue.Queue):
         cached_uids = []

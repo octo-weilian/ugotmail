@@ -1,36 +1,33 @@
 import email
+import threading
 from urllib import response
 from mail.client import Mail
 import keyring
 import email
+from email.generator import BytesGenerator
+import re
+import json
+# from mail import parser
 import re
 
-outlook_client = Mail("outlook.office365.com",993,
-                            keyring.get_credential("HOTMAIL",None).username,
-                            keyring.get_credential("HOTMAIL",None).password)
+# outlook_inbox = Mail("outlook.office365.com",
+#                         keyring.get_credential("HOTMAIL",None).username,
+#                         keyring.get_credential("HOTMAIL",None).password)
 
-icloud_client = Mail("imap.mail.me.com",993,
-                    keyring.get_credential("APPLE",None).username,
-                    keyring.get_credential("APPLE",None).password)
+# icloud_inbox = Mail("imap.mail.me.com",
+#                         keyring.get_credential("APPLE",None).username,
+#                         keyring.get_credential("APPLE",None).password)
 
-with outlook_client.connection() as conn:
-    inbox = conn.select_folder("INBOX",readonly=True)
 
-    uid_next = conn.folder_status("INBOX","UIDNEXT").get(b'UIDNEXT')
-    print(uid_next)
+# msg_uids = icloud_inbox.parse_uids()
 
-    msg_uids = conn.search('4429')[0]
-    print(msg_uids)
+
+def normalize_subject(subject):
+    pattern = '\A(?!(?:COM[0-9]|CON|LPT[0-9]|NUL|PRN|AUX|com[0-9]|con|lpt[0-9]|nul|prn|aux)|[\s\.])[^\\\/:*"?<>|]{1,254}'
+    result = re.sub(pattern, '_', subject)
+    return result
+
+test = 'D16073_orphan_reads.fa;710[F9|R21],14892_orphan_reads.fa;229[F19|R16]'
+
+print(normalize_subject(test))
    
-    
-    # for msg_seq,data in conn.fetch(msg_uids,['RFC822']).items():
-    #     email_msg = email.message_from_bytes(data[b"RFC822"],_class=email.message.EmailMessage)
-    #     email_subject = email_msg.get("Subject")
-    #     print(msg_seq,email_subject)
-
-    # conn.idle()
-    # while True:
-    #     idle_response = conn.idle_check(timeout=10)
-        
-
-        

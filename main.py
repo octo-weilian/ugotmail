@@ -1,22 +1,21 @@
-from mail.client import Watchdog
 import keyring
-from threading import Thread
+from mail.client import Mail
+import schedule
+import time
 
 if __name__ == '__main__':
     #instantiate a background process
-    outlook_inbox = Watchdog(server="outlook.office365.com",
-                                    port=993,
-                                    user=keyring.get_credential("HOTMAIL",None).username,
-                                    secret=keyring.get_credential("HOTMAIL",None).password,
-                                    queue_size=20,
-                                    parse_interval=15)
+    outlook_inbox = Mail("outlook.office365.com",
+                        keyring.get_credential("HOTMAIL",None).username,
+                        keyring.get_credential("HOTMAIL",None).password)
     
-    icloud_inbox = Watchdog(server="imap.mail.me.com",
-                                    port=993,
-                                    user=keyring.get_credential("APPLE",None).username,
-                                    secret=keyring.get_credential("APPLE",None).password,
-                                    queue_size=20,
-                                    parse_interval=15)
+    apple_inbox = Mail("imap.mail.me.com",
+                        keyring.get_credential("APPLE",None).username,
+                        keyring.get_credential("APPLE",None).password)
     
-    Thread(target=outlook_inbox.monitor).start()
-    Thread(target=icloud_inbox.monitor).start()
+    outlook_inbox.sync(1)
+    apple_inbox.sync(1)
+
+    while True:
+        schedule.run_pending()
+        time.sleep(1)

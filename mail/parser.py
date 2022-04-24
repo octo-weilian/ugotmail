@@ -1,11 +1,26 @@
 import email
-from imapclient import IMAPClient
 import logging
+from imapclient import IMAPClient
 from email.generator import BytesGenerator
 from .logginghandler import LOGGER
+import os
 
-def get_attachments(email_msg):
-    return [part.get_filename() for part in email_msg.iter_attachments()]
+def get_attachments(email_msg,save_to=None):
+    fnames = []
+    for part in email_msg.iter_attachments():
+        fname = part.get_filename()
+        fnames.append(fname)
+        
+        if save_to and os.path.exists(save_to):
+            with open(fname,'wb') as dst:
+                dst.write(part.get_payload(decode=True))
+    return fnames
+
+def download_eml(email_msg,save_to=None):
+    if save_to and os.path.exists(save_to):
+        outf = os.path.join(save_to,f"{email_msg.get('Subject')}.eml")
+        with open(outf,'wb') as dst:
+            BytesGenerator(dst).flatten(email_msg)
 
 #method to parse mail
 def parse_msgs(connection,msg_uids):
@@ -14,8 +29,8 @@ def parse_msgs(connection,msg_uids):
         try:
             email_msg = email.message_from_bytes(data[b'RFC822'],_class=email.message.EmailMessage)
             email_subject = email_msg.get("Subject")
-            with open(f"data/{msg_uid} {email_subject}.eml",'wb') as dst:
-                BytesGenerator(dst).flatten(email_msg)
+            email_attachments = get_attachments(email_msg)
+
         except Exception as e:
-            LOGGER.error(f"Failed parsing message: {msg_uid}")
+            LOGGER.error(f"Failed parsing message: {msg_uid}:{e}")
             pass

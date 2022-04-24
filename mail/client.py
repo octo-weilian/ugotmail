@@ -59,8 +59,9 @@ class Mail:
                 self.make_uid(server_uid)   #set new uid
                 
     def sync(self,poll_freq=15):
-        LOGGER.info(f"Listening to {self.server}")
-        schedule.every(poll_freq).minutes.do(self.parse_uids)
+        if poll_freq>10:
+            LOGGER.info(f"Listening to {self.server}")
+            schedule.every(poll_freq).minutes.do(self.parse_uids)
 
 
             

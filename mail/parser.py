@@ -12,6 +12,7 @@ def get_attachments(email_msg,save_to=None):
         fnames.append(fname)
         
         if save_to and os.path.exists(save_to):
+            outf = os.path.join(save_to,fname)
             with open(fname,'wb') as dst:
                 dst.write(part.get_payload(decode=True))
     return fnames
@@ -29,8 +30,8 @@ def parse_msgs(connection,msg_uids):
         try:
             email_msg = email.message_from_bytes(data[b'RFC822'],_class=email.message.EmailMessage)
             email_subject = email_msg.get("Subject")
-            email_attachments = get_attachments(email_msg)
-
+            # email_attachments = get_attachments(email_msg)
+            
         except Exception as e:
             LOGGER.error(f"Failed parsing message: {msg_uid}:{e}")
             pass

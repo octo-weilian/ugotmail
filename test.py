@@ -16,8 +16,8 @@ outlook_inbox = Mail("outlook.office365.com",
 
 
 with outlook_inbox.connection() as conn:
-    uids = conn.search("ALL")
-    parser.parse_msgs(conn,[uids[-1]])
+    uids = conn.search("RECENT ALL")
+    print(len(uids))
 
 
 

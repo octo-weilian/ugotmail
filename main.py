@@ -13,8 +13,8 @@ if __name__ == '__main__':
                         keyring.get_credential("APPLE",None).username,
                         keyring.get_credential("APPLE",None).password)
     
-    outlook_inbox.sync(1)
-    apple_inbox.sync(1)
+    outlook_inbox.schedule_poll(1)
+    apple_inbox.schedule_poll(1)
 
     while True:
         schedule.run_pending()

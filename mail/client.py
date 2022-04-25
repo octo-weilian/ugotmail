@@ -9,6 +9,7 @@ from .logginghandler import LOGGER
 from .parser import parse_msgs
 import configparser
 
+#initialize configfile
 CONFIG = configparser.ConfigParser()
 CACHEFILE = "logs/cacheUID.ini"
 CONFIG.read(CACHEFILE)
@@ -34,7 +35,6 @@ class Mail:
                 yield client
         except Exception as e:
             LOGGER.error(f"Unable to connect to {self.server}: {e}")
-            pass
         finally:
             client.logout()
 
@@ -45,7 +45,7 @@ class Mail:
     def make_uid(self,uid = None):
         if not uid:
             with self.connection() as conn:
-                uid = conn.search("ALL")[-1]
+                uid = conn.search("RECENT ALL")[-1]
         with open(CACHEFILE,"w") as f:
             CONFIG[self.server] = {"UID":uid,"lastsync":int(time.time())}
             CONFIG.write(f)
@@ -53,12 +53,12 @@ class Mail:
     def parse_uids(self):
         storedUID,lastSync = self.read_uid()
         with self.connection() as conn:
-            if (server_uid:=conn.search("ALL")[-1])> storedUID:
+            if (server_uid:=conn.search("RECENT ALL")[-1])> storedUID:
                 uids = conn.search(f"UID {storedUID}:*")[1:]
                 parse_msgs(conn,uids)       #download message
                 self.make_uid(server_uid)   #set new uid
                 
-    def sync(self,poll_freq=15):
+    def schedule_poll(self,poll_freq=15):
         if poll_freq>10:
             LOGGER.info(f"Listening to {self.server}")
             schedule.every(poll_freq).minutes.do(self.parse_uids)

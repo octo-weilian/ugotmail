@@ -7,7 +7,7 @@ HANDLER.setLevel(logging.DEBUG)
 FORMATTER = logging.Formatter('%(asctime)s - %(message)s',datefmt='%Y-%m-%d %H:%M:%S')
 HANDLER.setFormatter(FORMATTER)
 
-LOGGER = logging.getLogger(__name__)
+LOGGER = logging.getLogger('logger')
 LOGGER.setLevel(logging.INFO)
 LOGGER.addHandler(HANDLER)
 

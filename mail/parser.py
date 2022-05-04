@@ -1,9 +1,4 @@
-import email
-import logging
-from imapclient import IMAPClient
-from email.generator import BytesGenerator
-from .logginghandler import LOGGER
-import os
+from . import *
 
 def get_attachments(email_msg,save_to=None):
     fnames = []
@@ -31,7 +26,6 @@ def parse_msgs(connection,msg_uids):
             email_msg = email.message_from_bytes(data[b'RFC822'],_class=email.message.EmailMessage)
             email_subject = email_msg.get("Subject")
             # email_attachments = get_attachments(email_msg)
-            
         except Exception as e:
             LOGGER.error(f"Failed parsing message: {msg_uid}:{e}")
             pass

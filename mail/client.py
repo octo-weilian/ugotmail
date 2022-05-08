@@ -1,4 +1,5 @@
 from . import *
+from threading import Thread
 
 #sync age
 LAST_SYNCED_DAYS = 5 
@@ -9,14 +10,20 @@ class Mail:
 
     #input IMAP and authentication parameters
     def __init__(self,server,port,ssl,win_credential,folder,session_name):
+
         self.server = server 
         self.port = port
         self.ssl = ssl
-        self.user = keyring.get_credential(win_credential,None).username
-        self.secret = keyring.get_credential(win_credential,None).password
         self.folder = folder
         self.session_name = session_name
 
+        #TODO: make this work. Python as a Windows Service cannot access the Windows Credential?
+        try:
+            self.user = keyring.get_credential(win_credential,None).username
+            self.secret = keyring.get_credential(win_credential,None).password
+        except Exception as e:
+            pass
+    
         if not CACHE_CONFIG.has_section(self.session_name):
             self.make_uid()
 
@@ -52,19 +59,22 @@ class Mail:
                 if (server_uid:=conn.search("RECENT ALL")[-1])> stored_uid:
                     uids = conn.search(f"UID {stored_uid}:*")[1:]
                     parser.parse_msgs(conn,uids)       #download message
-                    self.make_uid(server_uid)   #set new uid
+                    self.make_uid(server_uid)          #set new uid
         else:
-            LOGGER.error(f'Cached UID {self.session_name} is older than {LAST_SYNCED_DAYS} days')
+            LOGGER.error(f'Unable to parse messages. Cached UID {self.session_name} is older than {LAST_SYNCED_DAYS} days')
     
     def schedule_poll(self,poll_freq=15):
         if poll_freq>10:
             LOGGER.info(f"Listening to {self.server} ({poll_freq} min. poll interval)")
             schedule.every(poll_freq).minutes.do(self.parse_uids)
+            
 
 class Watchdog:
     def __init__(self):
-        for section in IMAP_CONFIG.sections():
+        for i in range(len(IMAP_CONFIG.sections())):
+            section = IMAP_CONFIG.sections()[i]
             config = dict(IMAP_CONFIG[section])
+
             mail_session = Mail(server=config.get('server'),
                                 port=int(config.get('port')),
                                 ssl=config.get('ssl'),
@@ -72,8 +82,9 @@ class Watchdog:
                                 folder=config.get('folder'),
                                 session_name = section
                                 )
-            mail_session.schedule_poll(poll_freq=int(config.get('poll')))
-        
+            
+            Thread(target=mail_session.schedule_poll,args= ( int(config.get('poll')), ), daemon=True).start()
+            
     def run(self):
         while True:
             schedule.run_pending()

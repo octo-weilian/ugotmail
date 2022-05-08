@@ -1,4 +1,4 @@
-from . import logginghandler
+from .logginghandler import LOGGER
 from . import parser
 
 #client.py
@@ -27,5 +27,3 @@ IMAP_INI = "imapConfig.ini"
 IMAP_CONFIG = configparser.ConfigParser()
 IMAP_CONFIG.read(IMAP_INI)
 
-#logger
-LOGGER = logging.getLogger('logger')

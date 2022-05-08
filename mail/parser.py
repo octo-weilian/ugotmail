@@ -1,4 +1,6 @@
 from . import *
+import email
+from email import utils
 
 def get_attachments(email_msg,save_to=None):
     fnames = []
@@ -18,6 +20,9 @@ def download_eml(email_msg,save_to=None):
         with open(outf,'wb') as dst:
             BytesGenerator(dst).flatten(email_msg)
 
+def get_localtime(datestring):
+    return utils.parsedate_to_datetime(datestring).astimezone()
+    
 #method to parse mail
 def parse_msgs(connection,msg_uids):
     LOGGER.info(f'Parsing {len(msg_uids)} new messages')
@@ -25,7 +30,9 @@ def parse_msgs(connection,msg_uids):
         try:
             email_msg = email.message_from_bytes(data[b'RFC822'],_class=email.message.EmailMessage)
             email_subject = email_msg.get("Subject")
-            # email_attachments = get_attachments(email_msg)
+            localtime = get_localtime(email_msg.get("Date"))
+            yield localtime
+
         except Exception as e:
             LOGGER.error(f"Failed parsing message: {msg_uid}:{e}")
             pass

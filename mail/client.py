@@ -1,5 +1,8 @@
 from . import *
+from . import parser
 from threading import Thread
+from contextlib import contextmanager
+from imapclient import IMAPClient
 
 #sync age
 LAST_SYNCED_DAYS = 5 
@@ -9,7 +12,7 @@ LAST_SYNCED_MAX = LAST_SYNCED_DAYS * 3600
 class Mail:
 
     #input IMAP and authentication parameters
-    def __init__(self,server,port,ssl,win_credential,folder,session_name):
+    def __init__(self,server,port,ssl,folder,session_name):
 
         self.server = server 
         self.port = port
@@ -17,10 +20,9 @@ class Mail:
         self.folder = folder
         self.session_name = session_name
 
-        #TODO: make this work. Python as a Windows Service cannot access the Windows Credential?
         try:
-            self.user = keyring.get_credential(win_credential,None).username
-            self.secret = keyring.get_credential(win_credential,None).password
+            self.user = json.loads(os.getenv(server)).get("username")
+            self.secret = json.loads(os.getenv(server)).get("secret")
         except Exception as e:
             pass
     
@@ -68,7 +70,6 @@ class Mail:
             LOGGER.info(f"Listening to {self.server} ({poll_freq} min. poll interval)")
             schedule.every(poll_freq).minutes.do(self.parse_uids)
             
-
 class Watchdog:
     def __init__(self):
         for i in range(len(IMAP_CONFIG.sections())):
@@ -78,7 +79,6 @@ class Watchdog:
             mail_session = Mail(server=config.get('server'),
                                 port=int(config.get('port')),
                                 ssl=config.get('ssl'),
-                                win_credential=config.get('wincredential'),
                                 folder=config.get('folder'),
                                 session_name = section
                                 )

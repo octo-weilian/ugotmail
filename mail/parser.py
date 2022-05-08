@@ -1,5 +1,6 @@
 from . import *
 import email
+from email.generator import BytesGenerator
 from email import utils
 
 def get_attachments(email_msg,save_to=None):
@@ -30,8 +31,8 @@ def parse_msgs(connection,msg_uids):
         try:
             email_msg = email.message_from_bytes(data[b'RFC822'],_class=email.message.EmailMessage)
             email_subject = email_msg.get("Subject")
-            localtime = get_localtime(email_msg.get("Date"))
-            yield localtime
+            #localtime = get_localtime(email_msg.get("Date"))
+            LOGGER.info(f'Subject: {email_subject}')
 
         except Exception as e:
             LOGGER.error(f"Failed parsing message: {msg_uid}:{e}")

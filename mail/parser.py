@@ -2,6 +2,7 @@ from . import *
 import email
 from email.generator import BytesGenerator
 from email import utils
+from email.message import EmailMessage
 
 def get_attachments(email_msg,save_to=None):
     fnames = []
@@ -29,7 +30,7 @@ def parse_msgs(connection,msg_uids):
     LOGGER.info(f'Parsing {len(msg_uids)} new messages')
     for msg_uid,data in connection.fetch(msg_uids,"RFC822").items():
         try:
-            email_msg = email.message_from_bytes(data[b'RFC822'],_class=email.message.EmailMessage)
+            email_msg = email.message_from_bytes(data[b'RFC822'],_class=EmailMessage)
             email_subject = email_msg.get("Subject")
             #localtime = get_localtime(email_msg.get("Date"))
             LOGGER.info(f'Subject: {email_subject}')

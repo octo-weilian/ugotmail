@@ -1,6 +1,8 @@
 IMAPClient==2.2.0
 importlib-metadata==4.11.3
-keyring==23.5.0
+psycopg2-binary==2.9.3
+python-dotenv==0.20.0
+pywin32==304
 pywin32-ctypes==0.2.0
 schedule==1.1.0
 six==1.16.0

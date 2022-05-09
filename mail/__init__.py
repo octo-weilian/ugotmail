@@ -16,4 +16,4 @@ IMAP_INI = "imapConfig.ini"
 IMAP_CONFIG = configparser.ConfigParser()
 IMAP_CONFIG.read(IMAP_INI)
 
-load_dotenv()
+load_dotenv(IMAP_CONFIG["secrets"]["dotenv"])

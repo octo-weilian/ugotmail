@@ -5,8 +5,8 @@ from contextlib import contextmanager
 from imapclient import IMAPClient
 
 #sync age
-LAST_SYNCED_DAYS = 5 
-LAST_SYNCED_MAX = LAST_SYNCED_DAYS * 3600
+LAST_SYNCED_DAYS = 1 
+LAST_SYNCED_MAX = int(LAST_SYNCED_DAYS * 3600)
 
 #mail client
 class Mail:
@@ -56,35 +56,42 @@ class Mail:
         
     def parse_uids(self):
         stored_uid,last_synced = self.read_uid()
-        if (time.time()-last_synced) < LAST_SYNCED_MAX:
+        try:
             with self.connection() as conn:
                 if (server_uid:=conn.search("RECENT ALL")[-1])> stored_uid:
                     uids = conn.search(f"UID {stored_uid}:*")[1:]
-                    parser.parse_msgs(conn,uids)       #download message
-                    self.make_uid(server_uid)          #set new uid
-        else:
-            LOGGER.error(f'Unable to parse messages. Cached UID {self.session_name} is older than {LAST_SYNCED_DAYS} days')
-    
-    def schedule_poll(self,poll_freq=15):
-        if poll_freq>10:
-            LOGGER.info(f"Listening to {self.server} ({poll_freq} min. poll interval)")
-            schedule.every(poll_freq).minutes.do(self.parse_uids)
-            
+                    parser.parse_msgs(conn,uids)       #parse messages
+        except Exception as e:
+            LOGGER.error(f"Unable to parse UIDs {stored_uid}/{server_uid}: {e}")
+        finally:
+            if (time.time()-last_synced) >= LAST_SYNCED_MAX:
+                LOGGER.info(f"Cached UID renewed: {server_uid}")
+                self.make_uid(server_uid)  #refresh uid
+        
+
+    def schedule_poll(self,poll_freq=4):
+        if poll_freq<=6:
+            minute_marks = list(range(0,60,int((60/poll_freq))))
+            LOGGER.info(f"Listening to {self.server} (every {int((60/poll_freq))} minutes)")
+            for mark in minute_marks:
+                schedule.every().hours.at(f":{str(mark).zfill(2)}").do(self.parse_uids)
+                
 class Watchdog:
     def __init__(self):
+
         for i in range(len(IMAP_CONFIG.sections())):
             section = IMAP_CONFIG.sections()[i]
             config = dict(IMAP_CONFIG[section])
-
-            mail_session = Mail(server=config.get('server'),
-                                port=int(config.get('port')),
-                                ssl=config.get('ssl'),
-                                folder=config.get('folder'),
-                                session_name = section
-                                )
-            
-            Thread(target=mail_session.schedule_poll,args= ( int(config.get('poll')), ), daemon=True).start()
-            
+            if config.get("server"):
+                mail_session = Mail(server=config.get('server'),
+                                    port=int(config.get('port')),
+                                    ssl=config.get('ssl'),
+                                    folder=config.get('folder'),
+                                    session_name = section
+                                    )
+                
+                Thread(target=mail_session.schedule_poll,args= ( int(config.get('poll')), ), daemon=True).start()
+                
     def run(self):
         while True:
             schedule.run_pending()

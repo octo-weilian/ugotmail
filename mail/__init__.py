@@ -2,18 +2,25 @@ from .logginghandler import LOGGER
 import configparser
 import time
 import os
+import sys
 import logging
-from dotenv import load_dotenv
+from dotenv import load_dotenv,find_dotenv
 import schedule
 import json
 
-#load configfiles
+#load existing cached UID
 CACHE_CONFIG = configparser.ConfigParser()
 CACHE_INI = "logs/cacheUID.ini"
 CACHE_CONFIG.read(CACHE_INI)
 
-IMAP_INI = "imapConfig.ini"
-IMAP_CONFIG = configparser.ConfigParser()
-IMAP_CONFIG.read(IMAP_INI)
+#load app configfile
+APP_INI = "appConfig.ini"
+APP_CONFIG = configparser.ConfigParser()
+APP_CONFIG.read(APP_INI)
 
-load_dotenv(IMAP_CONFIG["secrets"]["dotenv"])
+secrets = APP_CONFIG["secrets"]["dotenv"]
+if find_dotenv(secrets):
+    load_dotenv(secrets)
+else:
+    LOGGER.error(f"FileNotFoundError: {secrets}. Program exited.")
+    sys.exit()

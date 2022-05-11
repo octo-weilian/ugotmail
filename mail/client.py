@@ -1,5 +1,5 @@
 from . import *
-from . import parser
+from .parser import ExtraParsers
 from threading import Thread
 from contextlib import contextmanager
 from imapclient import IMAPClient,SocketTimeout
@@ -14,7 +14,7 @@ READING_TIMEOUT = int(APP_CONFIG['client']['reading_timeout'])
 CLIENT_TIMEOUT = SocketTimeout(connect=CONNECTION_TIMEOUT, read=READING_TIMEOUT)
 
 #additional search patterns
-SEARCH_PATTERNS = []
+SEARCH_PATTERNS = ["TO","@prisma-geocensus.nl","SUBJECT","prisma","FROM","@kadaster.nl"]
 
 #mail client
 class Mail:
@@ -43,7 +43,7 @@ class Mail:
                 mailbox = client.select_folder(folder=self.folder,readonly=True)
                 yield client
         except Exception as e:
-            LOGGER.error(f"Unable to connect to {self.server}: {e}")
+            LOGGER.error(f"Unable to connect to {self.session_name}: {e}")
         finally:
             client.logout()
 
@@ -63,28 +63,29 @@ class Mail:
             CACHE_CONFIG[self.session_name] = {"uid":uid,"lastsynced":int(time.time())}
             CACHE_CONFIG.write(f)
         
-    def parse_uids(self):
+    def poll_data(self):
         stored_uid,last_synced = self.read_uid()
         try:
             with self.connection() as conn:
                 if (server_uid:=conn.search("RECENT ALL")[-1])> stored_uid:
                     search_on = [f"UID {stored_uid}:*"] + SEARCH_PATTERNS
                     uids = conn.search(search_on)[1:]
-                    parser.parse_msgs(conn,uids)       #parse messages
+                    return ExtraParsers(conn,uids).parse_posts() 
         except Exception as e:
             LOGGER.error(f"Unable to parse UIDs {stored_uid}/{server_uid}: {e}")
         finally:
-            if (time.time()-last_synced) >= REFRESH_MAX:
+            if ((time.time()-last_synced) >= REFRESH_MAX) and (stored_uid!=server_uid):
                 LOGGER.info(f"Cached UID renewed with: {server_uid}")
                 self.make_uid(server_uid)  #refresh uid
         
     def schedule_poll(self,poll_freq=4):
         if poll_freq<=6:
-            minute_marks = list(range(0,60,int((60/poll_freq))))
+            steps = int((60/poll_freq))
+            minute_marks = list(range(0,60,steps))
             for mark in minute_marks:
-                schedule.every().hours.at(f":{str(mark).zfill(2)}").do(self.parse_uids)
+                schedule.every().hours.at(f":{str(mark).zfill(2)}").do(self.poll_data)
             
-            LOGGER.info(f"Listening to {self.session_name} every {int((60/poll_freq))} minutes.")
+            LOGGER.info(f"Listening to {self.session_name} every {steps} minutes.")
            
                 
 class Watchdog:
